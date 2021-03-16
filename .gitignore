@@ -1,2 +1,3 @@
-*.ipynb
+__pycache__
+Projet M2 ESA.ipynb
 *_checkpoints
