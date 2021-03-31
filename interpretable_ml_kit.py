@@ -146,13 +146,14 @@ def generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size=
     sns.set_context("notebook", font_scale=1.2)
     ax = sns.lineplot(x="feature", y="pdp", data=pdp_df)
     plt.xlabel(reference_feature, labelpad=10)
-    plt.ylabel("Average Predicted Probability", labelpad=20)
+    # plt.ylabel("Average Predicted Probability", labelpad=20)
     return ax, reference_feature
 
 
 
 def pdp_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
     ax, reference_feature = generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size)
+    ax.set_ylabel("Average Predicted Probability", labelpad=20)
     ax.set_title('PD Plot for Feature:\n' + reference_feature)
     
 
@@ -224,7 +225,7 @@ def ice_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10,
     plt.plot(grid, pdp, color="red")
     plt.title('ICE Plot for Feature:\n' + reference_feature)
     plt.xlabel(reference_feature, labelpad=10)
-    plt.ylabel("Average Predicted Probability", labelpad=20)
+    plt.ylabel("Predicted Probability", labelpad=20)
     # add custom legend
     custom_line = Line2D([0], [0], color="red", lw=1)
     plt.legend([custom_line], ['Average'], shadow=True, loc="upper left", bbox_to_anchor=(1, 1))
@@ -311,4 +312,5 @@ def ale(estimator, X, reference_feature, bins=10):
 
 def ale_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
     ax, reference_feature = generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size)
+    ax.set_ylabel("ALE", labelpad=20)
     ax.set_title('ALE Plot for Feature:\n' + reference_feature)
