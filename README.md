@@ -15,7 +15,7 @@ In this project we implement three model-agnostic interpretation methods:
  
 ### Usage
 
-A short demonstration of how to use this module is outlined in this notebook: https://github.com/belzaina/mlinterp/blob/master/interpretable_ml_kit.ipynb
+A short demonstration of how to use this module is outlined in this notebook: https://github.com/belzaina/mlinterp/blob/master/demo.ipynb
   
 ### About
 
