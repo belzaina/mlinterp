@@ -1,5 +1,10 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+import seaborn as sns
+from sklearn.tree import DecisionTreeClassifier
+
 
 def get_german_credit_data(file_path="data/GermanDataset.data"):
     """
