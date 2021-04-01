@@ -8,14 +8,14 @@ In this project we implement three model-agnostic interpretation methods:
   - Individual Conditional Expectation (ICE)
   - Accumulated Local Effects (ALE) Plot
   
+### Usage
+
+A short demonstration of how to use this module is outlined in this notebook: https://github.com/belzaina/mlinterp/blob/master/demo.ipynb  
+  
 ### Useful Links
 
   - Streamlit Application: https://share.streamlit.io/belzaina/mlinterp/app.py
   - Core methods implementation code: https://github.com/belzaina/mlinterp/blob/master/interpretable_ml_kit.py
- 
-### Usage
-
-A short demonstration of how to use this module is outlined in this notebook: https://github.com/belzaina/mlinterp/blob/master/demo.ipynb
   
 ### About
 
