@@ -59,7 +59,8 @@ def _infer_feature_type(feature, X):
     Parameters
     ----------
     feature: string or list
-        list for one-hot encoded feature
+        string: for numeric (e.g. 'Age') and binary (e.g. 'accountStatus_1') feature 
+        list: for one-hot encoded feature (e.g. creditHistory is represented as: ['creditHistory_A30', 'creditHistory_A31', 'creditHistory_A32', 'creditHistory_A33', 'creditHistory_A34'])
     X: DataFrame
     
     Returns
@@ -72,6 +73,7 @@ def _infer_feature_type(feature, X):
     if type(feature) == list:
         if len(feature) < 2: 
             raise ValueError('one-hot encoded feature should contain at least 2 elements')
+        # one-hot encoded feature (represented as list) should be a subset of the features set
         if not (set(feature) < set(X.columns.values)):
             raise ValueError(f"feature does not exist: {feature}")
         feature_type = 'onehot'
@@ -86,9 +88,39 @@ def _infer_feature_type(feature, X):
     return feature_type
 
 
+def generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
+    """Generic Ploting Function for PDP and ALE
+    
+    Parameters
+    ----------
+    grid: x-axis values
+    values: y-axis values
+    reference_feature: string or list
+        Which feature is calculated on, list for one-hot encoded feature
+    feature_type: numeric, binary, or one-hot
+    fig_size: 2-element list
+    
+    Returns
+    -------
+    tuple: reference to matplotlib plot, reference_feature
+    """
+    # pretty feature name
+    # remove "_" if binary or one-hot
+    if feature_type == "onehot": reference_feature = reference_feature[0].split("_")[0]
+    elif feature_type == "binary": reference_feature = reference_feature.split("_")[0]
+    # set figure size
+    plt.rcParams['figure.figsize'] = fig_size 
+    # plotting
+    pdp_df = pd.DataFrame({"feature": grid, "pdp": values})
+    sns.set_theme()
+    sns.set_context("notebook", font_scale=1.2)
+    ax = sns.lineplot(x="feature", y="pdp", data=pdp_df)
+    plt.xlabel(reference_feature, labelpad=10)
+    return ax, reference_feature
+
 
 def pdp(estimator, X, reference_feature, grid_resolution=50):
-    """Generate Partial Dependence Plot
+    """Compute Partial Dependence
     
     Parameters
     ----------
@@ -102,56 +134,70 @@ def pdp(estimator, X, reference_feature, grid_resolution=50):
     -------
     tuple : grid values, pdp values, feature_type
     """
+    # Check if the feature exist and infer its type: numeric, binary, or one-hot encoded
     feature_type = _infer_feature_type(reference_feature, X)
     pdp_average_prediction_prob = []
     if feature_type == "numeric":
+        # compute the min and max in order to generate the grid (i.e. x-axis values)
         rf_min = X[reference_feature].min()
         rf_max = X[reference_feature].max()
         grid = np.linspace(rf_min, rf_max, num=grid_resolution, endpoint=True)
         for i in grid:
             pdp_df = X.copy()
+            # set the feature to a fixed value
             pdp_df[reference_feature] = i
+            # compute the average predicted probability
             pdp_predictions = estimator.predict_proba(pdp_df)[:, 1]
             pdp_average_prediction_prob.append(pdp_predictions.mean())
     elif feature_type == "onehot":
         grid = reference_feature
         for main_label in grid:
             pdp_df = X.copy()
+            # get the other modalities of the feature
             other_labels = set(grid) -  set([main_label]) 
+            # For one-hot encoded feature, each modality of the categorical feature is represented a vector
+            # as a consequence, setting the feature to a fixed modality, say "A30" for "creditHistory" is equivalent to set "creditHistory_A30" to 1
+            # and all other to 0, i.e. creditHistory_A31, creditHistory_A32...
             pdp_df[main_label] = 1
             pdp_df[list(other_labels)] = 0
+            # compute the average predicted probability
             pdp_predictions = estimator.predict_proba(pdp_df)[:, 1]
             pdp_average_prediction_prob.append(pdp_predictions.mean())
     else:
         grid = [0, 1]
         for i in grid:
             pdp_df = X.copy()
+            # set the feature to a fixed value (either 0 or 1)
             pdp_df[reference_feature] = i
+            # compute the average predicted probability
             pdp_predictions = estimator.predict_proba(pdp_df)[:, 1]
             pdp_average_prediction_prob.append(pdp_predictions.mean())
+        # convert to string for pretty plotting
         grid = [str(x) for x in grid]
     return grid, pdp_average_prediction_prob, feature_type
 
 
 
-def generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
-    # pretty feature name
-    if feature_type == "onehot": reference_feature = reference_feature[0].split("_")[0]
-    elif feature_type == "binary": reference_feature = reference_feature.split("_")[0]
-    # set figure size
-    plt.rcParams['figure.figsize'] = fig_size 
-    # plotting
-    pdp_df = pd.DataFrame({"feature": grid, "pdp": values})
-    sns.set_theme()
-    sns.set_context("notebook", font_scale=1.2)
-    ax = sns.lineplot(x="feature", y="pdp", data=pdp_df)
-    plt.xlabel(reference_feature, labelpad=10)
-    # plt.ylabel("Average Predicted Probability", labelpad=20)
-    return ax, reference_feature
+
 
 
 
 def pdp_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
+    """Generate Partial Dependence Plot
+    
+    Parameters
+    ----------
+    grid: x-axis values
+    values: y-axis values
+    reference_feature: string or list
+        Which feature is calculated on, list for one-hot encoded feature
+    feature_type: numeric, binary, or one-hot
+    fig_size: 2-element list
+    
+    Returns
+    -------
+    plot figure
+    """
     ax, reference_feature = generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size)
     ax.set_ylabel("Average Predicted Probability", labelpad=20)
     ax.set_title('PD Plot for Feature:\n' + reference_feature)
@@ -159,7 +205,7 @@ def pdp_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10,
 
     
 def ice(estimator, X, reference_feature, grid_resolution=50):
-    """Generate Individual Conditional Expectation Plot
+    """Compute Individual Conditional Expectation
     
     Parameters
     ----------
@@ -174,25 +220,36 @@ def ice(estimator, X, reference_feature, grid_resolution=50):
     -------
     tuple : grid, ice values of shape (nrows, grid_resolution), feature_type
     """
+    # NB: Same reasoning as PDP
+    # Except we do not return the average predicted probability
+    # Instead, we return all predicted probabilities, shape: (number of observations, grid_resolution) 
     feature_type = _infer_feature_type(reference_feature, X)
     ice_prediction_prob = []
     if feature_type == "numeric":
+        # compute the min and max in order to generate the grid (i.e. x-axis values)
         rf_min = X[reference_feature].min()
         rf_max = X[reference_feature].max()
         grid = np.linspace(rf_min, rf_max, num=grid_resolution, endpoint=True)
         for i in grid:
             ice_df = X.copy()
+            # set the feature to a fixed value
             ice_df[reference_feature] = i
+            # compute individual predictions
             ice_predictions = estimator.predict_proba(ice_df)[:, 1]
             ice_prediction_prob.append(ice_predictions)
-        ice_prediction_prob = np.stack(ice_prediction_prob).T # shape: (nrows, grid_resolution)  
+        ice_prediction_prob = np.stack(ice_prediction_prob).T # shape: (number of observations, grid_resolution)  
     elif feature_type == "onehot":
         grid = reference_feature
         for main_label in grid:
             ice_df = X.copy()
+            # get the other modalities of the feature
             other_labels = set(reference_feature) -  set([main_label]) 
+            # For one-hot encoded feature, each modality of the categorical feature is represented a vector
+            # as a consequence, setting the feature to a fixed modality, say "A30" for "creditHistory" is equivalent to set "creditHistory_A30" to 1
+            # and all other to 0, i.e. creditHistory_A31, creditHistory_A32...
             ice_df[main_label] = 1
             ice_df[list(other_labels)] = 0
+            # compute individual predictions
             ice_predictions = estimator.predict_proba(ice_df)[:, 1]
             ice_prediction_prob.append(ice_predictions)
         ice_prediction_prob = np.stack(ice_prediction_prob).T
@@ -200,16 +257,34 @@ def ice(estimator, X, reference_feature, grid_resolution=50):
         grid = [0, 1]
         for i in grid:
             ice_df = X.copy()
+            # set the feature to a fixed value (either 0 or 1)
             ice_df[reference_feature] = i
+            # compute individual predictions
             ice_predictions = estimator.predict_proba(ice_df)[:, 1]
             ice_prediction_prob.append(ice_predictions)
         ice_prediction_prob = np.stack(ice_prediction_prob).T
+        # convert to string for pretty plotting
         grid = [str(x) for x in grid]
     return grid, ice_prediction_prob, feature_type
 
 
 
 def ice_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
+    """Generate Individual Conditional Expectation Plot
+    
+    Parameters
+    ----------
+    grid: x-axis values
+    values: y-axis values
+    reference_feature: string or list
+        Which feature is calculated on, list for one-hot encoded feature
+    feature_type: numeric, binary, or one-hot
+    fig_size: 2-element list
+    
+    Returns
+    -------
+    plot figure
+    """
     # pretty feature name
     if feature_type == "onehot": reference_feature = reference_feature[0].split("_")[0]
     elif feature_type == "binary": reference_feature = reference_feature.split("_")[0]
@@ -218,9 +293,10 @@ def ice_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10,
     # plotting
     sns.set_theme()
     sns.set_context("notebook", font_scale=1.2)
+    # Plot one line per observation
     for i in range(values.shape[0]):
         plt.plot(grid, values[i,], color="C0", linewidth=0.5)
-    # plot average (i.e. pdp)
+    # plot the average in red (i.e. pdp)
     pdp = np.mean(values, axis=0)
     plt.plot(grid, pdp, color="red")
     plt.title('ICE Plot for Feature:\n' + reference_feature)
