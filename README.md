@@ -11,6 +11,7 @@ In this project we implement three model-agnostic interpretation methods:
 ### Useful Links
 
   - Streamlit Application: https://share.streamlit.io/belzaina/mlinterp/app.py
+  - German Credit use case with documented code: https://github.com/belzaina/mlinterp/blob/master/InterpretableML.ipynb
   - Core methods implementation code: https://github.com/belzaina/mlinterp/blob/master/interpretable_ml_kit.py
  
 ### Usage

@@ -6,6 +6,7 @@ import seaborn as sns
 from sklearn.tree import DecisionTreeClassifier
 
 
+
 def get_german_credit_data(file_path="data/GermanDataset.data"):
     """
     Load and format the German Credit dataset
@@ -88,8 +89,9 @@ def _infer_feature_type(feature, X):
     return feature_type
 
 
+
 def generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
-    """Generic Ploting Function for PDP and ALE
+    """Generic Plotting Function for PDP and ALE
     
     Parameters
     ----------
@@ -117,6 +119,7 @@ def generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size=
     ax = sns.lineplot(x="feature", y="pdp", data=pdp_df)
     plt.xlabel(reference_feature, labelpad=10)
     return ax, reference_feature
+
 
 
 def pdp(estimator, X, reference_feature, grid_resolution=50):
@@ -164,6 +167,7 @@ def pdp(estimator, X, reference_feature, grid_resolution=50):
             pdp_predictions = estimator.predict_proba(pdp_df)[:, 1]
             pdp_average_prediction_prob.append(pdp_predictions.mean())
     else:
+        # feature_type == "binary"
         grid = [0, 1]
         for i in grid:
             pdp_df = X.copy()
@@ -175,10 +179,6 @@ def pdp(estimator, X, reference_feature, grid_resolution=50):
         # convert to string for pretty plotting
         grid = [str(x) for x in grid]
     return grid, pdp_average_prediction_prob, feature_type
-
-
-
-
 
 
 
@@ -222,7 +222,7 @@ def ice(estimator, X, reference_feature, grid_resolution=50):
     """
     # NB: Same reasoning as PDP
     # Except we do not return the average predicted probability
-    # Instead, we return all predicted probabilities, shape: (number of observations, grid_resolution) 
+    # Instead, we return individual predictions, shape: (number of observations, grid_resolution) 
     feature_type = _infer_feature_type(reference_feature, X)
     ice_prediction_prob = []
     if feature_type == "numeric":
@@ -254,6 +254,7 @@ def ice(estimator, X, reference_feature, grid_resolution=50):
             ice_prediction_prob.append(ice_predictions)
         ice_prediction_prob = np.stack(ice_prediction_prob).T
     else:
+        # feature_type == "binary"
         grid = [0, 1]
         for i in grid:
             ice_df = X.copy()
@@ -309,7 +310,7 @@ def ice_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10,
     
     
 def ale(estimator, X, reference_feature, bins=10):
-    """Generate Accumulated Local Effects Plot
+    """Compute Accumulated Local Effects
     
     Parameters
     ----------
@@ -324,15 +325,27 @@ def ale(estimator, X, reference_feature, bins=10):
     -------
     tuple : quantiles, ale, feature_type
     """
+    # Check if the feature exist and infer its type: numeric, binary, or one-hot encoded
     feature_type = _infer_feature_type(reference_feature, X)
     if feature_type == "numeric":
+        # Compute the quantiles (x-axis)
+        # We use np.unique because np.quantile may return repeated values (depending on the distribution shape of the reference feature)
         quantiles = np.unique(np.quantile(X[reference_feature], q = np.linspace(0, 1, bins + 1), interpolation="lower"))
+        # Re-compute the number of bins in order to reflect the computed quantiles
         bins = len(quantiles) - 1
-        # -1 to start counting from 0
-        # np.clip ensure min age to be assigned to 0 not -1
+        # Assign observations to quantile intervals
+        # We substract 1 to start counting from 0
+        # np.clip ensure that the observation with the min value of the feature to be assigned to interval 0 and not -1
         indices = np.clip(np.digitize(X[reference_feature], quantiles, right=True) - 1, 0, None)
+        # Initialize empty vector to store ALE values
         ale = np.zeros(bins)
+        # We also need to keep track of the number of observations assigned to each bin in order to compute weighted averages
         bins_sample_size = np.zeros(bins)
+        # For each bin [q_lower, q_upper]:
+        #    - Step 1: subset observations assigned to this bin
+        #    - Step 2: For those observations, replace the feature by q_upper (X1) and then again by q_lower (X0)
+        #    - Step 3: Compute the individual effects as the difference in predicted probabilities between X1 and X0 (individual_effects)
+        #    - Step 4: Compute the average effect for that bin, i.e. individual_effects.mean()
         for i in range(bins):
             x_subset = X[indices == i]
             subset_size = x_subset.shape[0]
@@ -344,14 +357,26 @@ def ale(estimator, X, reference_feature, bins=10):
                 individual_effect = estimator.predict_proba(x_upper)[:, 1] - estimator.predict_proba(x_lower)[:, 1] 
                 ale[i] = individual_effect.mean()
                 bins_sample_size[i] = subset_size
+        # Compute the Accumulated effect (i.e. cumulative sum of the average effects)
         ale = np.array([0, *ale.cumsum()])
-        ale = (ale[1:] + ale[:-1]) / 2
-        ale -= np.sum(ale * bins_sample_size) / X.shape[0]
+        # We use the center of quantiles intervals for plotting
         quantiles = (quantiles[1:] + quantiles[:-1]) / 2
+        ale = (ale[1:] + ale[:-1]) / 2
+        # Compute the centered ALE
+        ale -= np.sum(ale * bins_sample_size) / X.shape[0]
     elif feature_type == "onehot":
+        # compute the number of modalities
         num_cat = len(reference_feature)
+        # Initialize empty vector to store ALE values
         ale = np.zeros(num_cat)
+        # We also need to keep track of the number of observations assigned to each bin in order to compute weighted averages
         sample_size = np.zeros(num_cat)
+        # Assume that modalities are ordered by their similarity to each other, then:
+        # For each modality (i.e. bin in x-axis):
+        #    - Step 1: subset observations assigned to this modality (i.e. == 1): X1
+        #    - Step 2: For those observations, replace the modality by 0 (i.e. as not having this modality) and set the similar modality to 1 (i.e. as having the modality): X0
+        #    - Step 3: Compute the individual effects as the difference in predicted probabilities between X1 and X0 (individual_effects)
+        #    - Step 4: Compute the average effect for that bin, i.e. individual_effects.mean()
         for i in range(num_cat):
             main_feature = reference_feature[i]
             neighbor_feature = reference_feature[i - 1]
@@ -364,10 +389,15 @@ def ale(estimator, X, reference_feature, bins=10):
                 individual_effect = estimator.predict_proba(x_subset)[:, 1] - estimator.predict_proba(x_lower)[:, 1] 
                 ale[i] = individual_effect.mean()
                 sample_size[i] = subset_size
+        # Compute the Accumulated effect (i.e. cumulative sum of the average effects)
         ale = ale.cumsum()
+        # Compute the centered ALE
         ale -= np.sum(ale * sample_size) / X.shape[0]
         quantiles = reference_feature
     else:
+        # feature_type == "binary":
+        # We follow the same logic as "onehot" case
+        # The only difference is that we have only two modalities, 0 and 1
         ale = np.zeros(2)
         sample_size = np.zeros(2)
         for i in range(2):
@@ -387,6 +417,21 @@ def ale(estimator, X, reference_feature, bins=10):
 
 
 def ale_pretty_plot(grid, values, reference_feature, feature_type, fig_size=[10, 5]):
+    """Generate Accumulated Local Effects Plot
+    
+    Parameters
+    ----------
+    grid: x-axis values
+    values: y-axis values
+    reference_feature: string or list
+        Which feature is calculated on, list for one-hot encoded feature
+    feature_type: numeric, binary, or one-hot
+    fig_size: 2-element list
+    
+    Returns
+    -------
+    plot figure
+    """
     ax, reference_feature = generic_pretty_plot(grid, values, reference_feature, feature_type, fig_size)
     ax.set_ylabel("ALE", labelpad=20)
     ax.set_title('ALE Plot for Feature:\n' + reference_feature)
